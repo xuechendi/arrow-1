@@ -1,5 +1,3 @@
-#!/usr/bin/env bash
-#
 # Licensed to the Apache Software Foundation (ASF) under one
 # or more contributor license agreements.  See the NOTICE file
 # distributed with this work for additional information
@@ -17,25 +15,26 @@
 # specific language governing permissions and limitations
 # under the License.
 
-set -e
+#
+# arrow_parquet_java
+#
 
-source_dir=${1}/cpp
-build_dir=${2}/cpp
+# Headers: top level
 
-export CLASSPATH=`$HADOOP_HOME/bin/hadoop classpath --glob`
-export HADOOP_CONF_DIR=$HADOOP_HOME/etc/hadoop
-export LIBHDFS3_CONF=$HADOOP_CONF_DIR/hdfs-site.xml
-export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$HADOOP_HOME/lib/native/
+project(arrow_parquet_java)
 
-# execute cpp tests
-pushd ${build_dir}
-debug/arrow-io-hdfs-test
-debug/arrow-hdfs-test
-popd
+# Find java/jni
+include(FindJava)
+include(UseJava)
+include(FindJNI)
 
-# cannot use --pyargs with custom arguments like --hdfs or --only-hdfs, because
-# pytest ignores them, see https://github.com/pytest-dev/pytest/issues/3517
-export PYARROW_TEST_HDFS=ON
+message("generating headers to ${JNI_HEADERS_DIR}")
 
-pytest -v --pyargs pyarrow.tests.test_fs
-pytest -v --pyargs pyarrow.tests.test_hdfs
+add_jar(
+        arrow_parquet_java
+        src/main/java/org/apache/arrow/adapter/common/ArrowBufBuilder.java
+        src/main/java/org/apache/arrow/adapter/common/ArrowFieldNodeBuilder.java
+        src/main/java/org/apache/arrow/adapter/common/ArrowRecordBatchBuilder.java
+        GENERATE_NATIVE_HEADERS arrow_parquet_java-native
+        DESTINATION ${JNI_HEADERS_DIR}
+)
