@@ -23,6 +23,7 @@ import java.util.List;
 
 import org.apache.arrow.memory.BaseAllocator;
 import org.apache.arrow.memory.BufferLedger;
+import org.apache.arrow.memory.Ownerships;
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode;
 import org.apache.arrow.vector.ipc.message.ArrowRecordBatch;
 
@@ -64,13 +65,27 @@ public class ArrowRecordBatchBuilderImpl {
     for (ArrowBufBuilder tmp : recordBatchBuilder.bufferBuilders) {
       buffers.add(createArrowBuf(tmp));
     }
-    return new ArrowRecordBatch(recordBatchBuilder.length, nodes, buffers);
+    return createRecordBatch(nodes, buffers);
+  }
+
+  /**
+   * Create {@link ArrowRecordBatch} then decrease ref count numbers by 1 for the populated buffers.
+   * We have to do this because each {@link ArrowRecordBatch} already holds internal ref for buffers it uses.
+   *
+   * @see ArrowRecordBatch#ArrowRecordBatch(int, java.util.List, java.util.List, boolean)
+   */
+  private ArrowRecordBatch createRecordBatch(List<ArrowFieldNode> nodes, List<ArrowBuf> buffers) {
+    try {
+      return new ArrowRecordBatch(recordBatchBuilder.length, nodes, buffers);
+    } finally {
+      buffers.forEach(b -> b.getReferenceManager().release());
+    }
   }
 
   private ArrowBuf createArrowBuf(ArrowBufBuilder tmp) {
-    AdaptorAllocationManager referenceManager =
+    final AdaptorAllocationManager allocationManager =
         new AdaptorAllocationManager(tmp.nativeInstanceId, allocator, tmp.memoryAddress, tmp.size);
-    BufferLedger ledger = referenceManager.associate(allocator, true); // ref count + 1
+    final BufferLedger ledger = Ownerships.get().takeOwnership(allocator, allocationManager);
     return new ArrowBuf(ledger, null, tmp.size, tmp.memoryAddress, false);
   }
 } 

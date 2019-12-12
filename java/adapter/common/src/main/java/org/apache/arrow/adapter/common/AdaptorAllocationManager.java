@@ -49,10 +49,5 @@ public class AdaptorAllocationManager extends AllocationManager {
     nativeRelease(nativeMemoryHolder);
   }
 
-  @Override
-  public BufferLedger associate(BaseAllocator allocator, boolean retain) {
-    return super.associate(allocator, retain);
-  }
-
   private native void nativeRelease(long nativeMemoryHolder);
 }
