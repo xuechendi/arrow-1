@@ -19,7 +19,6 @@ package org.apache.arrow.adapter.common;
 
 import org.apache.arrow.memory.AllocationManager;
 import org.apache.arrow.memory.BaseAllocator;
-import org.apache.arrow.memory.BufferLedger;
 
 /**
  * A simple allocation manager implementation for memory allocated by native code.

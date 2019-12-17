@@ -17,6 +17,10 @@
 
 package org.apache.arrow.memory;
 
+/**
+ * Instance of Ownerships.
+ * This class is used to save Ownerships.
+ */
 public class Ownerships {
   private static final Ownerships INSTANCE = new Ownerships();
 
