@@ -57,6 +57,27 @@ static ConcurrentMap<std::shared_ptr<arrow::dataset::Scanner>> scanner_holder_;
 static ConcurrentMap<std::shared_ptr<arrow::RecordBatchIterator>> iterator_holder_;
 static ConcurrentMap<std::shared_ptr<arrow::Buffer>> buffer_holder_;
 
+#define JNI_ASSIGN_OR_THROW_NAME(x, y) ARROW_CONCAT(x, y)
+
+#define JNI_ASSIGN_OR_THROW_IMPL(t, lhs, rexpr)                             \
+  auto t = (rexpr);                                                         \
+  if (!t.status().ok()) {                                                   \
+    env->ThrowNew(runtime_exception_class, t.status().message().c_str());   \
+  }                                                                         \
+  lhs = std::move(t).ValueOrDie();
+
+#define JNI_ASSIGN_OR_THROW(lhs, rexpr)                                     \
+  JNI_ASSIGN_OR_THROW_IMPL(JNI_ASSIGN_OR_THROW_NAME(_tmp_var, __COUNTER__), lhs, rexpr)
+
+#define JNI_ASSERT_OK_OR_THROW(expr)                                          \
+  do {                                                                        \
+    auto _res = (expr);                                                       \
+    arrow::Status _st = ::arrow::internal::GenericToStatus(_res);             \
+    if (!_st.ok()) {                                                          \
+       env->ThrowNew(runtime_exception_class, _st.message().c_str());  \
+    }                                                                         \
+  } while (false);
+
 jclass CreateGlobalClassReference(JNIEnv* env, const char* class_name) {
   jclass local_class = env->FindClass(class_name);
   jclass global_class = (jclass)env->NewGlobalRef(local_class);
@@ -154,7 +175,7 @@ arrow::fs::FileSystemPtr GetFileSystem(JNIEnv *env, jint id, std::string path,
       return std::make_shared<arrow::fs::LocalFileSystem>();
     case 1: {
       arrow::fs::FileSystemPtr ret;
-      arrow::fs::FileSystemFromUri(path, &ret, out_path).ok();
+      JNI_ASSERT_OK_OR_THROW(arrow::fs::FileSystemFromUri(path, &ret, out_path));
       return ret;
     }
     default:std::string error_message = "illegal filesystem id: " + std::to_string(id);
@@ -355,7 +376,7 @@ JNIEXPORT jbyteArray JNICALL Java_org_apache_arrow_dataset_jni_JniWrapper_inspec
     (JNIEnv* env, jobject, jlong data_source_discovery_id) {
   std::shared_ptr<arrow::dataset::DataSourceDiscovery> d
       = data_source_discovery_holder_.Lookup(data_source_discovery_id);
-  std::shared_ptr<arrow::Schema> schema = d->Inspect().ValueOrDie();// fixme ValueOrDie
+  JNI_ASSIGN_OR_THROW(std::shared_ptr<arrow::Schema> schema, d->Inspect())
   return ToSchemaByteArray(env, schema);
 }
 
@@ -365,10 +386,10 @@ JNIEXPORT jbyteArray JNICALL Java_org_apache_arrow_dataset_jni_JniWrapper_inspec
  * Signature: (J)J
  */
 JNIEXPORT jlong JNICALL Java_org_apache_arrow_dataset_jni_JniWrapper_createDataSource
-    (JNIEnv *, jobject, jlong data_source_discovery_id) {
+    (JNIEnv* env, jobject, jlong data_source_discovery_id) {
   std::shared_ptr<arrow::dataset::DataSourceDiscovery> d
       = data_source_discovery_holder_.Lookup(data_source_discovery_id);
-  arrow::dataset::DataSourcePtr data_source = d->Finish().ValueOrDie();// fixme ValueOrDie
+  JNI_ASSIGN_OR_THROW(arrow::dataset::DataSourcePtr data_source, d->Finish())
   return data_source_holder_.Insert(data_source);
 }
 
@@ -422,8 +443,8 @@ JNIEXPORT void JNICALL Java_org_apache_arrow_dataset_jni_JniWrapper_closeFragmen
 JNIEXPORT jlongArray JNICALL Java_org_apache_arrow_dataset_jni_JniWrapper_getScanTasks
     (JNIEnv* env, jobject, jlong fragment_id) {
   arrow::dataset::DataFragmentPtr data_fragment = data_fragment_holder_.Lookup(fragment_id);
-  arrow::dataset::ScanTaskIterator itr = data_fragment->Scan(std::make_shared<arrow::dataset::ScanContext>())
-      .ValueOrDie(); // fixme ValueOrDie
+  JNI_ASSIGN_OR_THROW(arrow::dataset::ScanTaskIterator itr,
+      data_fragment->Scan(std::make_shared<arrow::dataset::ScanContext>()))
   std::vector<arrow::dataset::ScanTaskPtr> vector = collect(std::move(itr));
   jlongArray ret = env->NewLongArray(vector.size());
   for (unsigned long i = 0; i < vector.size(); i++) {
@@ -450,9 +471,9 @@ JNIEXPORT void JNICALL Java_org_apache_arrow_dataset_jni_JniWrapper_closeScanTas
  * Signature: (J)J
  */
 JNIEXPORT jlong JNICALL Java_org_apache_arrow_dataset_jni_JniWrapper_scan
-    (JNIEnv *, jobject, jlong scan_task_id) {
+    (JNIEnv* env, jobject, jlong scan_task_id) {
   arrow::dataset::ScanTaskPtr scan_task = scan_task_holder_.Lookup(scan_task_id);
-  arrow::RecordBatchIterator record_batch_iterator = scan_task->Scan().ValueOrDie(); // fixme ValueOrDie
+  JNI_ASSIGN_OR_THROW(arrow::RecordBatchIterator record_batch_iterator, scan_task->Scan())
   return iterator_holder_
       .Insert(std::make_shared<arrow::RecordBatchIterator>(std::move(record_batch_iterator))); // move and propagate
 }
@@ -544,8 +565,8 @@ JNIEXPORT jlong JNICALL Java_org_apache_arrow_dataset_file_JniWrapper_makeFileSe
   std::shared_ptr<arrow::dataset::FileFormat> file_format = GetFileFormat(env, file_format_id);
   std::string out_path;
   arrow::fs::FileSystemPtr fs = GetFileSystem(env, file_system_id, JStringToCString(env, path), &out_path);
-  std::shared_ptr<arrow::dataset::DataSourceDiscovery>
-      d = arrow::dataset::SingleFileDataSourceDiscovery::Make(out_path, fs, file_format).ValueOrDie();// fixme ValueOrDie
+  JNI_ASSIGN_OR_THROW(std::shared_ptr<arrow::dataset::DataSourceDiscovery> d,
+      arrow::dataset::SingleFileDataSourceDiscovery::Make(out_path, fs, file_format))
   return data_source_discovery_holder_.Insert(d);
 }
 
@@ -570,13 +591,13 @@ JNIEXPORT jlong JNICALL Java_org_apache_arrow_dataset_jni_JniWrapper_createScann
     env->ReleaseLongArrayElements(data_source_ids, ids_long, JNI_ABORT);
   }
   std::shared_ptr<arrow::Schema> schema;
-  FromSchemaByteArray(env, schema_bytes, &schema).ok(); // fixme ok()
-  arrow::dataset::DatasetPtr dataset = arrow::dataset::Dataset::Make(data_source_vector, schema).ValueOrDie(); // fixme ValueOrDie()
-  std::shared_ptr<arrow::dataset::ScannerBuilder> scanner_builder = dataset->NewScan().ValueOrDie(); // fixme ValueOrDie()
+  JNI_ASSERT_OK_OR_THROW(FromSchemaByteArray(env, schema_bytes, &schema))
+  JNI_ASSIGN_OR_THROW(arrow::dataset::DatasetPtr dataset, arrow::dataset::Dataset::Make(data_source_vector, schema))
+  JNI_ASSIGN_OR_THROW(std::shared_ptr<arrow::dataset::ScannerBuilder> scanner_builder, dataset->NewScan())
 
   std::vector<std::string> column_vector = ToStringVector(env, columns);
-  scanner_builder->Project(column_vector).ok(); // fixme ok()
-  scanner_builder->BatchSize(batch_size).ok(); // fixme ok()
+  JNI_ASSERT_OK_OR_THROW(scanner_builder->Project(column_vector));
+  JNI_ASSERT_OK_OR_THROW(scanner_builder->BatchSize(batch_size));
 
   // initialize filters
   jsize exprs_len = env->GetArrayLength(filter);
@@ -588,9 +609,9 @@ JNIEXPORT jlong JNICALL Java_org_apache_arrow_dataset_jni_JniWrapper_createScann
     env->ThrowNew(illegal_argument_exception_class, error_message.c_str());
   }
   if (condition.has_root()) {
-    scanner_builder->Filter(translateFilter(condition, env)).ok(); // fixme ok()
+    JNI_ASSERT_OK_OR_THROW(scanner_builder->Filter(translateFilter(condition, env)));
   }
-  auto scanner = scanner_builder->Finish().ValueOrDie();
+  JNI_ASSIGN_OR_THROW(auto scanner, scanner_builder->Finish())
   jlong id = scanner_holder_.Insert(scanner);
   releaseFilterInput(filter, exprs_bytes, env);
   return id;
@@ -615,7 +636,7 @@ JNIEXPORT void JNICALL Java_org_apache_arrow_dataset_jni_JniWrapper_closeScanner
  */
 JNIEXPORT jbyteArray JNICALL Java_org_apache_arrow_dataset_jni_JniWrapper_getSchemaFromScanner
     (JNIEnv* env, jobject, jlong scanner_id) {
-  std::shared_ptr<arrow::Schema> schema = scanner_holder_.Lookup(scanner_id)->GetSchema().ValueOrDie(); // fixme ValueOrDie()
+  JNI_ASSIGN_OR_THROW(std::shared_ptr<arrow::Schema> schema, scanner_holder_.Lookup(scanner_id)->GetSchema())
   return ToSchemaByteArray(env, schema);
 }
 
@@ -627,7 +648,7 @@ JNIEXPORT jbyteArray JNICALL Java_org_apache_arrow_dataset_jni_JniWrapper_getSch
 JNIEXPORT jlongArray JNICALL Java_org_apache_arrow_dataset_jni_JniWrapper_getScanTasksFromScanner
     (JNIEnv* env, jobject, jlong scanner_id) {
   auto scanner = scanner_holder_.Lookup(scanner_id);
-  arrow::dataset::ScanTaskIterator itr = scanner->Scan().ValueOrDie(); // fixme ValueOrDie
+  JNI_ASSIGN_OR_THROW(arrow::dataset::ScanTaskIterator itr, scanner->Scan())
   std::vector<arrow::dataset::ScanTaskPtr> vector = collect(std::move(itr));
   // Duplicated code with :323-:330
   jlongArray ret = env->NewLongArray(vector.size());
