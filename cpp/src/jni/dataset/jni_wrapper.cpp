@@ -330,6 +330,7 @@ arrow::dataset::ExpressionPtr translateNode(types::TreeNode node, JNIEnv* env) {
     } else {
       std::string error_message = "Unknown operation name in comparison node";
       env->ThrowNew(illegal_argument_exception_class, error_message.c_str());
+      return nullptr; // unreachable
     }
     const types::TreeNode& left_arg = cp_node.leftarg();
     const types::TreeNode& right_arg = cp_node.rightarg();
@@ -350,7 +351,7 @@ arrow::dataset::ExpressionPtr translateNode(types::TreeNode node, JNIEnv* env) {
   }
   std::string error_message = "Unknown node type";
   env->ThrowNew(illegal_argument_exception_class, error_message.c_str());
-  return nullptr;
+  return nullptr; // unreachable
 }
 
 arrow::dataset::ExpressionPtr translateFilter(types::Condition condition, JNIEnv* env) {
