@@ -259,8 +259,17 @@ static arrow::Status try_dlopen(std::vector<fs::path> potential_paths, const cha
     }
   }
 
+  std::string errors_string = "";
+  if (!error_messages.empty()) {
+    for (const auto &piece : error_messages) {
+      errors_string += "|";
+      errors_string += piece;
+    }
+    errors_string += "|";
+  }
+
   if (out_handle == NULL) {
-    return arrow::Status::IOError("Unable to load ", name);
+    return arrow::Status::IOError("Unable to load ", name, ". Errors: ", errors_string);
   }
 
   return arrow::Status::OK();
