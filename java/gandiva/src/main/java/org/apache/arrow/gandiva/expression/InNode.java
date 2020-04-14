@@ -66,6 +66,7 @@ public class InNode implements TreeNode {
   public static InNode makeIntInExpr(TreeNode node, Set<Integer> intValues) {
     return new InNode(intValues, null, null, null, node);
   }
+
   public static InNode makeLongInExpr(Field field, Set<Long> longValues) {
     return new InNode(null, longValues, null, null, field);
   }
@@ -73,6 +74,7 @@ public class InNode implements TreeNode {
   public static InNode makeLongInExpr(TreeNode node, Set<Long> longValues) {
     return new InNode(null, longValues, null, null, node);
   }
+
   public static InNode makeStringInExpr(Field field, Set<String> stringValues) {
     return new InNode(null, null, stringValues, null, field);
   }
